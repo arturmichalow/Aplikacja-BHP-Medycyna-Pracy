@@ -5,3 +5,4 @@ reportlab>=4.2
 pypdf>=4.2
 xlsxwriter>=3.2
 python-dateutil>=2.9
+python-docx
