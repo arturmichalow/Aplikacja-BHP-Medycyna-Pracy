@@ -88,128 +88,140 @@ def init_db() -> None:
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            login TEXT UNIQUE NOT NULL,
-            full_name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            active BOOLEAN NOT NULL DEFAULT TRUE,
-            failed_attempts INTEGER NOT NULL DEFAULT 0,
-            blocked_until TIMESTAMP NULL,
-            last_login TIMESTAMP NULL,
-            permissions_json TEXT NOT NULL
-        );
+    try:
+        # blokada startowa - tylko jedna instancja aplikacji robi init naraz
+        cur.execute("SELECT pg_advisory_lock(987654321)")
 
-        CREATE TABLE IF NOT EXISTS departments (
-            id SERIAL PRIMARY KEY,
-            name TEXT UNIQUE NOT NULL
-        );
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                login TEXT UNIQUE NOT NULL,
+                full_name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                active BOOLEAN NOT NULL DEFAULT TRUE,
+                failed_attempts INTEGER NOT NULL DEFAULT 0,
+                blocked_until TIMESTAMP NULL,
+                last_login TIMESTAMP NULL,
+                permissions_json TEXT NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS positions (
-            id SERIAL PRIMARY KEY,
-            department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-            name TEXT NOT NULL,
-            UNIQUE(department_id, name)
-        );
+            CREATE TABLE IF NOT EXISTS departments (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS hazard_map (
-            id SERIAL PRIMARY KEY,
-            department_name TEXT NOT NULL,
-            position_name TEXT NOT NULL,
-            hazard_name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            section_label TEXT NOT NULL,
-            work_conditions TEXT
-        );
+            CREATE TABLE IF NOT EXISTS positions (
+                id SERIAL PRIMARY KEY,
+                department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                UNIQUE(department_id, name)
+            );
 
-        CREATE TABLE IF NOT EXISTS employees (
-            id SERIAL PRIMARY KEY,
-            full_name TEXT NOT NULL,
-            department_name TEXT NOT NULL,
-            position_name TEXT NOT NULL,
-            pesel TEXT,
-            address TEXT,
-            last_exam_date DATE NULL,
-            next_exam_date DATE NULL,
-            status TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
+            CREATE TABLE IF NOT EXISTS hazard_map (
+                id SERIAL PRIMARY KEY,
+                department_name TEXT NOT NULL,
+                position_name TEXT NOT NULL,
+                hazard_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                section_label TEXT NOT NULL,
+                work_conditions TEXT
+            );
 
-        CREATE TABLE IF NOT EXISTS referrals (
-            id SERIAL PRIMARY KEY,
-            referral_number TEXT UNIQUE NOT NULL,
-            employee_id INTEGER NULL REFERENCES employees(id) ON DELETE SET NULL,
-            employee_name TEXT NOT NULL,
-            department_name TEXT NOT NULL,
-            position_name TEXT NOT NULL,
-            position_description TEXT,
-            issue_date DATE NOT NULL,
-            next_exam_date DATE NULL,
-            exam_type TEXT NOT NULL,
-            employer TEXT,
-            pesel TEXT,
-            employee_address TEXT,
-            place_of_issue TEXT,
-            status TEXT,
-            work_conditions TEXT,
-            hazards_count INTEGER NOT NULL DEFAULT 0,
-            pdf_path TEXT,
-            created_by TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
+            CREATE TABLE IF NOT EXISTS employees (
+                id SERIAL PRIMARY KEY,
+                full_name TEXT NOT NULL,
+                department_name TEXT NOT NULL,
+                position_name TEXT NOT NULL,
+                pesel TEXT,
+                address TEXT,
+                last_exam_date DATE NULL,
+                next_exam_date DATE NULL,
+                status TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
 
-        CREATE TABLE IF NOT EXISTS referral_hazards (
-            id SERIAL PRIMARY KEY,
-            referral_id INTEGER NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
-            hazard_name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            section_label TEXT NOT NULL,
-            work_conditions TEXT
-        );
+            CREATE TABLE IF NOT EXISTS referrals (
+                id SERIAL PRIMARY KEY,
+                referral_number TEXT UNIQUE NOT NULL,
+                employee_id INTEGER NULL REFERENCES employees(id) ON DELETE SET NULL,
+                employee_name TEXT NOT NULL,
+                department_name TEXT NOT NULL,
+                position_name TEXT NOT NULL,
+                position_description TEXT,
+                issue_date DATE NOT NULL,
+                next_exam_date DATE NULL,
+                exam_type TEXT NOT NULL,
+                employer TEXT,
+                pesel TEXT,
+                employee_address TEXT,
+                place_of_issue TEXT,
+                status TEXT,
+                work_conditions TEXT,
+                hazards_count INTEGER NOT NULL DEFAULT 0,
+                pdf_path TEXT,
+                created_by TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
 
-        CREATE TABLE IF NOT EXISTS audit_log (
-            id SERIAL PRIMARY KEY,
-            event_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            username TEXT,
-            action TEXT NOT NULL,
-            details TEXT
-        );
-        """
-    )
-    conn.commit()
+            CREATE TABLE IF NOT EXISTS referral_hazards (
+                id SERIAL PRIMARY KEY,
+                referral_id INTEGER NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
+                hazard_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                section_label TEXT NOT NULL,
+                work_conditions TEXT
+            );
 
-    cur.execute("SELECT COUNT(*) AS cnt FROM users")
-    if cur.fetchone()["cnt"] == 0:
-        seed_users = [
-            ("admin", "Administrator BHP", "Administrator", "Admin123!@#"),
-            ("bhp", "Specjalista BHP", "BHP", "Bhp123!@#45"),
-            ("hr", "Specjalista HR", "HR", "Hr123!@#45"),
-            ("podglad", "Podgląd", "Podgląd", "Podglad123!@#"),
-        ]
-        for login, full_name, role, password in seed_users:
-            perms = json.dumps(ROLE_PRESETS[role], ensure_ascii=False)
-            cur.execute(
-                """
-                INSERT INTO users (login, full_name, role, password_hash, permissions_json)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (login, full_name, role, hash_password(password), perms),
-            )
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id SERIAL PRIMARY KEY,
+                event_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                username TEXT,
+                action TEXT NOT NULL,
+                details TEXT
+            );
+            """
+        )
         conn.commit()
 
-    cur.execute("SELECT COUNT(*) AS cnt FROM hazard_map")
-    if cur.fetchone()["cnt"] == 0 and DEFAULT_XLSM.exists():
-        import_hazard_map(DEFAULT_XLSM, replace=True, conn=conn)
+        cur.execute("SELECT COUNT(*) AS cnt FROM users")
+        if cur.fetchone()["cnt"] == 0:
+            seed_users = [
+                ("admin", "Administrator BHP", "Administrator", "Admin123!@#"),
+                ("bhp", "Specjalista BHP", "BHP", "Bhp123!@#45"),
+                ("hr", "Specjalista HR", "HR", "Hr123!@#45"),
+                ("podglad", "Podgląd", "Podgląd", "Podglad123!@#"),
+            ]
+            for login, full_name, role, password in seed_users:
+                perms = json.dumps(ROLE_PRESETS[role], ensure_ascii=False)
+                cur.execute(
+                    """
+                    INSERT INTO users (login, full_name, role, password_hash, permissions_json)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (login) DO NOTHING
+                    """,
+                    (login, full_name, role, hash_password(password), perms),
+                )
+            conn.commit()
 
-    cur.execute("SELECT COUNT(*) AS cnt FROM employees")
-    if cur.fetchone()["cnt"] == 0:
-        seed_sample_data(conn)
+        cur.execute("SELECT COUNT(*) AS cnt FROM hazard_map")
+        if cur.fetchone()["cnt"] == 0 and DEFAULT_XLSM.exists():
+            import_hazard_map(DEFAULT_XLSM, replace=True, conn=conn)
 
-    conn.close()
+        cur.execute("SELECT COUNT(*) AS cnt FROM employees")
+        if cur.fetchone()["cnt"] == 0:
+            seed_sample_data(conn)
 
+        conn.commit()
+
+    finally:
+        try:
+            cur.execute("SELECT pg_advisory_unlock(987654321)")
+            conn.commit()
+        except Exception:
+            pass
+        conn.close()
 
 def import_hazard_map(file_path: str | Path, replace: bool = True, conn=None) -> int:
     own = conn is None
