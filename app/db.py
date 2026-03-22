@@ -83,7 +83,12 @@ def get_connection() -> sqlite3.Connection:
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
+def ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_def: str) -> None:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    existing = [row["name"] for row in rows]
+    if column_name not in existing:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+        conn.commit()
 
 def init_db() -> None:
     conn = get_connection()
@@ -184,6 +189,15 @@ def init_db() -> None:
         """
     )
     conn.commit()
+
+    # Naprawa starych baz SQLite - dołożenie brakujących kolumn
+    ensure_column(conn, "referrals", "position_description", "TEXT")
+    ensure_column(conn, "referrals", "work_conditions", "TEXT")
+    ensure_column(conn, "referrals", "hazards_count", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "referrals", "pdf_path", "TEXT")
+    ensure_column(conn, "referrals", "created_by", "TEXT")
+    ensure_column(conn, "referral_hazards", "work_conditions", "TEXT")
+    ensure_column(conn, "hazard_map", "work_conditions", "TEXT")
 
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
