@@ -1,5 +1,10 @@
 from __future__ import annotations
-import sqlite3, json, hashlib, os
+import psycopg2
+import streamlit as st
+
+def get_connection():
+    return psycopg2.connect(st.secrets["DB_URL"])
+
 from pathlib import Path
 from datetime import date, datetime, timedelta
 import pandas as pd
@@ -52,12 +57,7 @@ CATEGORY_TO_SECTION = {
 SECTION_OPTIONS = list(CATEGORY_TO_SECTION.values())
 
 
-def get_connection() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')
-    return conn
+
 
 
 def hash_password(password: str) -> str:
